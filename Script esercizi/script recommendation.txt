@@ -1,0 +1,57 @@
+// Prima call per fare la chiamata della procedure che proietti il grafo
+
+CALL gds.graph.project(
+'project_bigraph',  // nome del grafo proiettato in memoria
+['User', 'Dish'], // tipologia di nodo da tenere
+['RATED'] // tipologia di relazione da tenere
+)
+YIELD graphName AS graph, nodeProjection, nodeCount AS nodes, relationshipCount AS rels 
+
+// questo YIELD serve  a tenere delle specifiche dal comando chiamato dalla CALL, in questo caso il nome del grafo sotto la colonna graph, NodeProjection semplicemente mostra le specifiche dei nodi proiettati, nodeCount as nodes mostra sotto la colonna nodes il numero di nodi per ogni tipo e relationshipCount as rels sotto la colonna rels, il numero di relazioni del grafo proiettato. 
+
+RICORDA! PROIETTARE UN GRAFO É NECESSARIO QUANDO SI DEVONO FARE OPERAZIONI DI ANALISI DEI DATI. NON SI DEVE MODIFICARE IL GRAFO ESISTENTE MA SOLO UNA SUA PROIEZIONE, INOLTRE IL GRAFO COMPLETO HA ANCHE DATI NON NECESSARI.
+Una volta crato il grafo, per fare recommendation, cerchiamo la similaritá tra gli elementi che lo compongono
+
+// come cercare la similaritá
+CALL gds.nodeSimilarity.stream('project_bigraph') // funzione che calcola gli score
+YIELD node1, node2, similarity
+RETURN gds.util.asNode(node1) AS User1, gds.util.asNode(node2) AS User2, similarity 
+// ATTENZIONE! gds.util.asNode() in Cypher (usato con la Graph Data Science Library di Neo4j) serve a recuperare il nodo originale del database a partire dal suo ID interno in una projection di grafo [GPT]
+ORDER BY similarity DESCENDING, User1, User2 // fai return dei dati in ordine di similarity discendente 
+
+// aggiungo al grafo degli archi di similarity
+CALL gds.nodeSimilarity.stream('project_bigraph')
+YIELD node1, node2, similarity
+WITH gds.util.asNode(node1) AS user1, gds.util.asNode(node2) AS user2, similarity
+WHERE user1 <> user2 AND similarity > 0.2  // Imposta una soglia per la similarità, user1<>user2 significa che 1 e 2 sono user diversi
+
+// in questo caso MERGE viene usato per fare una creazione di relazioni
+MERGE (user1)-[r:SIMILAR_TO {similarity: similarity}]->(user2)
+RETURN user1.name AS user1, user2.name AS user2, r.similarity AS Similarity
+ORDER BY r.similarity DESC;
+
+// Usando le relazioni di similartá é ora possibile creare una recommandation 
+// In questo caso prendiamo in considerazione Bob e vogliamo fare i consigli per lui
+MATCH (bob:User {name:'Bob'})-[r:RATED]->(p:Dish)-[s:SIMILAR_TO]-(rec:Dish) // si va a cercare solo dei piatti simili a quelli che sono piaciuti a lui
+WHERE r.rating>=4 AND NOT EXISTS ((bob)-[:RATED]->(rec)) // ovviamente non deve conoscerli giá e devono avere un buon rating 4/5
+RETURN DISTINCT rec.name AS RecommendedDish, s.similarity AS Similarity
+ORDER BY s.similarity DESC
+LIMIT 5; // ne mostriamo solo i top 5
+
+// Creiamo la lista per qualsiasi utente
+MATCH (u:User)-[r:RATED]->(:Dish)-[s:SIMILAR_TO]-(rec:Dish)
+WHERE r.rating >= 4 AND NOT EXISTS (u)-[:RATED]->(rec)
+RETURN DISTINCT u.name, rec.name AS Recommendation, s.similarity AS Similarity
+ORDER BY Similarity DESC
+
+// Potrebbe essere utile cercare utenti simili in base a dove vivono
+// Identificare gli utenti che vivono nella stessa città e creare una relazione SIMILAR_TO con similarity 0.3
+MATCH (u1:User)-[:LIVES_IN]->(c:City)<-[:LIVES_IN]-(u2:User) // Match che serve a prelevare tutti gli user che puntano allo stesso nodo 
+WHERE u1 <> u2
+MERGE (u1)-[r:SIMILAR_TO {similarity: 0.3}]->(u2);
+
+// Uso la loro similaritá per trovare delle relazioni
+MATCH (u1:User)-[s:SIMILAR_TO]->(u2:User)-[r:RATED]->(rec:Dish)
+WHERE r.rating>=4 AND NOT EXISTS ((u1)-[:RATED]->(rec))
+RETURN DISTINCT u1.name, rec.name AS RecommendedDish, s.similarity AS Similarity
+ORDER BY s.similarity DESC

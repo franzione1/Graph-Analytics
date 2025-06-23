@@ -1,0 +1,51 @@
+\documentclass[11pt, twoside]{article}	% Always compile at least twice.
+\usepackage[lmargin=1in,rmargin=1in,tmargin=1in,bmargin=1in]{geometry}
+
+			% Scale Logo Size 
+
+% Style Package (Load After Cover Information)
+\usepackage{lib/mat999}	% Change to match style file
+
+% Using Images
+\usepackage{graphicx}
+
+\newcommand{\mysection}[2]{\setcounter{section}{#1}\addtocounter{section}{-1}\section{#2}}
+
+\newcommand{\facciatabianca}{\newpage\shipout\null\stepcounter{page}}
+
+% -------------------
+% Content
+% -------------------
+\begin{document}
+
+% First Page
+\input{lib/FirstPage}
+\facciatabianca
+
+% Table of Contents
+\thispagestyle{empty}
+\tableofcontents
+\thispagestyle{empty}
+\facciatabianca
+\newpage
+\pagestyle{fancy}
+\setcounter{section}{-1}
+\setcounter{page}{1}
+
+% Sections
+\input{Introduction/GraphIntro}
+\newpage
+\input{GraphImportance/importance}
+\newpage
+\input{GraphDatabase/graphdb}
+\newpage
+\input{GraphModeling/graphmodel}
+\newpage
+\input{ML&Graphs/ML}
+\newpage
+\input{GraphDataEngineering/dataengineering}
+\newpage
+\input{RecommendationsGraph/recommend}
+\newpage
+\input{KnowledgeGraphs/knowledge}
+\end{document}

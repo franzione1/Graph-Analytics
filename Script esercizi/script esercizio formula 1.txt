@@ -1,0 +1,65 @@
+1. Visualizza per ciascun team nome e la città del loro stabilimento
+
+// Nel dataset mancano le cittá. Ogni nodo team non ha la sede. 
+// COME IMPOSTARE LA PROPRIETÁ CITY:
+MATCH (f:Team{name:'Ferrari'})
+SET f.city = 'Maranello'
+
+// Visualizzazione di tutte le proprietá dei nodi Team
+MATCH (t:Team)
+RETURN t.name AS Name, t.city as City
+
+2. Mostra tutti i piloti e le loro relative nazionalità
+MATCH (d:Driver)
+RETURN d.name, d.nationality
+
+3. Esplora le relazioni a partire dal nodo Pilota 'Charles Leclerc'
+// COME ESPLORARE LE RELAZIONI
+MATCH (d:Driver{name:'Charles Leclerc'})-[r]-(m)
+RETURN type(r) AS tipo_relazione, r, m
+
+4. Esplora le relazioni a partire da un nodo Race. Poi crea delle relazioni per connettere il nodo Race 'MONACO GP' al resto del grafo (scegli tu come e a quale nodo connetterlo mantenendo la semantica delle relazioni già esistenti).
+MATCH (d:Race{name:'SUZUKA INTERNATIONAL RACING COURSE'})-[r]-(m)
+RETURN type(r) AS tipo_relazione, r, m
+
+// Faccio il check se MONACO ha giá relazioni
+MATCH (d:Race{name:'MONACO GP'})-[r]-(m)
+RETURN type(r) AS tipo_relazione, r, m
+
+MATCH (M:Race {name:'MONACO GP'})
+MATCH (C:Driver {name:'Charles Leclerc'})
+CREATE (C)-[:WINS]->(M)
+
+5. Visualizza i dati dei piloti con un contratto di sponsorizzazione Nike
+MATCH (d:Driver)<-[:SPONSORS]-(s:Sponsor{name:'Nike'}) 
+RETURN d.name AS NAME, s.name AS NAME_SPONSOR
+
+6. Mostra tutti i team che hanno piloti di nazionalità britannica, i dati dei piloti e i dati del team
+MATCH (t:Team)<-[:BELONGS_TO]-(d:Driver)
+WHERE d.nationality = 'British'
+RETURN t, d
+
+7.Per ogni team e nazionalità conta il numero di piloti
+MATCH (t:Team)<-[:BELONGS_TO]-(d:Driver)
+RETURN t.name AS team, d.nationality AS nazionalità, COUNT(*) AS numero_piloti
+ORDER BY t.name, d.nationality
+
+8. Mostra i dati delle gare vinte dal pilota "Carlos Sainz" (nome circuito e continente)
+MATCH (CS:Driver{name:'Carlos Sainz'})-[:WINS]->(r:Race)
+RETURN r.name AS NomeGara, r.place AS LuogoGara
+
+9. Usando Graph Pattern o Path Pattern: Trova piloti che condividono lo stesso team
+Graph Pattern	Descrive una struttura di nodi e relazioni	(a)-[:REL]->(b)
+Path Pattern	Come un graph pattern, ma salvato come percorso (variabile)	path = (a)-[:REL]->(b)	
+
+// Trovato tramite Graph Pattern
+MATCH (d:Driver)-[:BELONGS_TO]->(t:Team)<-[:BELONGS_TO]-(b:Driver)
+WHERE d <> b 
+RETURN d.name AS Pilota1, b.name AS Pilota2, t.name AS Team
+
+10. Usando lo Shortest Path: Trova il percorso più breve tra due piloti
+MATCH path = SHORTEST 1 (c:Driver{name:'Charles Leclerc'})-[:BELONGS_TO]-+(s:Driver{name:'Carlos Sainz'})// funzione che trova lo shortest path tra i due
+RETURN path
+
+
+ 

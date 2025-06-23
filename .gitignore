@@ -1,0 +1,44 @@
+# File di log e temporanei di LaTeX
+*.aux
+*.bbl
+*.blg
+*.brf
+*.fls
+*.fdb_latexmk
+*.glo
+*.idx
+*.ilg
+*.ind
+*.lof
+*.log
+*.lot
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+*.xdv
+
+# File di backup
+*.bak
+*~
+*.backup
+*.tmp
+
+# Cartelle tipiche di compilatori LaTeX
+_build/
+latex.out/
+out/
+
+# File generati da arara, latexmk o TeXstudio
+*.dvi
+*.ps
+*.run.xml
+
+# File di sistema
+.DS_Store
+Thumbs.db
+
+# File specifici di Overleaf (opzionale, se sincronizzi da Git)
+.overleaf/
