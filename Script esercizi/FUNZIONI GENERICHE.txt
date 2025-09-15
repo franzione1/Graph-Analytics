@@ -1,0 +1,306 @@
+----------------------- DOMANDE GENERICHE ------------------------------
+
+VISUALIZZO LO SCHEMA:
+call apoc.meta.graph()
+
+//CONTO IL NUMERO DI VERTICI
+MATCH(p) RETURN count(*)
+
+//CONTO IL NUMERO DI ISTANZE DI PAVIMENTI
+MATCH(p:pavimento) RETURN count(*) as num_pavimenti;
+
+//CONTO IL NUMERO DI ISTANZE DI FORNITORE
+MATCH(f:fornitore) RETURN count(*) as num_fornitori
+
+//GUARDO NEL GRAFO COME SONO COLLEGATI FORNITORE E PAVIMENTO
+MATCH(f:fornitore)-[p:PRODUCE]-(pa:pavimento) RETURN p
+
+//GUARDO NEL GRAFO COME SONO COLLEGATI UTENTE E PAVIMENTO
+MATCH p=(u:utente)-[o:ORDINA]-(pa:pavimento) RETURN p
+
+
+----------------------- MODIFICHE ------------------------------
+
+//Aggiungere un nuovo pavimento: modello 'Red4' di tipo laminato e formato 70x70, prezzo 35 al mq
+MERGE (p:pavimento {modello: 'Red4'}) 
+ON CREATE SET p.tipo='laminato', p.formato='70x70', p.prezzo=35 
+RETURN p
+
+
+//Aggiungere un abbinamento tra questo pavimento e il pavimento modello 'Paris'
+MATCH
+ (p:pavimento {modello: 'Red4'})
+ (p1:pavimento {modello: 'Paris'})
+MERGE (p)-[r:ABBINATO_A]->(p1)
+RETURN p.modello, type(r), p1.modello
+
+
+//Aggiungere come produttore del pavimento il fornitore di nome 'Lavish‘
+MATCH
+ (p:pavimento {modello: 'Red4'})
+ (f:fornitore {nome: 'Lavish'})
+MERGE (f)-[r:PRODUCE]->(p)
+ON CREATE SET r.anno_inizio=2025
+RETURN p.modello, type(r), f.nome, r.anno_inizio
+
+
+//Aggiungere un nuovo fornitore di nome 'Costly'
+MERGE (f:fornitore {nome: 'Costly'}) 
+RETURN f
+
+
+----------------------- VINCOLI ------------------------------
+
+//Aggiungere il vincolo di UNIQUE sul modello dei Pavimenti
+CREATE CONSTRAINT Unique_modello IF NOT EXISTS
+FOR (n:pavimento) REQUIRE n.modello IS UNIQUE
+
+
+//Aggiungere un vincolo che controlli che il tipo dei Pavimenti possa essere solo di tipo STRINGA
+CREATE CONSTRAINT tipo_string
+FOR (n:pavimento)
+REQUIRE n.tipo IS :: STRING
+
+////Aggiungere il vincolo sulla proprietà ORDINA, in modo che l’utente ordini una quantità di mq non nulla (dopo fare un prova dell’impossibilità di inserire ordini senza specificare i mq)
+CREATE CONSTRAINT quantita_esiste
+FOR ()-[o:ORDINA]-()
+REQUIRE o.mq IS NOT NULL;
+
+
+MATCH
+ (u:utente {nome: 'Vanessa'}),
+ (p:pavimento {modello: ' Paris'})
+MERGE (u)-[o:ORDINA]->(p)
+RETURN u.nome, type(o), p.modello
+
+MATCH (u)-[o:ORDINA]->(p) RETURN o.mq ORDER BY o.mq ;
+
+MATCH (p:pavimento)-[o:ORDINA]-(u:utente)
+RETURN o.mq ORDER  BY o.mq  ASC
+
+
+//Per tutti gli ordini, modificare il valore di mq in modo che sia sempre maggiore o uguale a 20, dove è minore sovrascrivere 20.
+
+MATCH ()-[o:ORDINA]-()
+WHERE o.mq<20
+SET o.mq = 20
+
+//oppure
+MERGE (p:pavimento)-[o:ORDINA]-(u:utente)
+ON MATCH SET o.mq = CASE
+    WHEN o.mq < 20 THEN 20
+    ELSE o.mq
+END
+
+----------------------- SELEZIONE ------------------------------
+
+//Per ogni fornitore riportare il suo nome e il numero di pavimenti prodotti 
+MATCH (n:fornitore)-[:PRODUCE]-(p:pavimento)
+RETURN n.nome, count(*) as num_pavimenti
+
+
+//Per ogni modello di pavimento riportare il numero di ordini ricevuti e ordinare il risultato in modo decrescente 
+MATCH (u:utente)-[:ORDINA]-(p:pavimento)
+RETURN p.modello, count(*) as num_ordini ORDER BY num_ordini DESC
+
+
+//Per ogni utente riportare il suo nome, il modello dei pavimenti ordinati 
+//e un pavimento abbinato a quello ordinato
+MATCH (u:utente)-[:ORDINA]-(p:pavimento)-[:ABBINATO_A]-(p2:pavimento)
+RETURN u.nome,p.modello, p2.modello as modello_abbinato
+
+
+//Riportare il nome degli utenti iscritti nel 2015 che hanno ordinato pavimenti che costano più di 30 euro/mq. Riportare anche il formato della piastrella.
+MATCH (u:utente)-[o:ORDINA]-(p:pavimento)
+WHERE p.prezzo>30  AND u.anno_iscrizione=2015
+RETURN u.nome,p.modello, p.formato, p.prezzo
+
+
+----------------------- GROUP ------------------------------
+
+//Contare quanti utenti esistono per anno di iscrizione (dove iscrizione è una property)
+MATCH (u:utente)
+RETURN u.anno_iscrizione, count(*)
+
+
+//Contare quanti fornitori esistono per anno di inizio collaborazione
+MATCH (f:fornitore)-[pr:PRODUCE]-(p:pavimento)
+RETURN pr.anno_inizio, count(*)
+
+
+//Riportare il modello dei pavimenti per ordine di prezzo descrescente
+MATCH (p:pavimento)
+RETURN p.modello ORDER BY p.prezzo DESC
+
+//Chi sono i fornitori che producono i 3 pavimenti più cari al mq?
+MATCH (f:fornitore)-[pr:PRODUCE]-(p:pavimento)
+RETURN f.nome, p.modello, p.prezzo ORDER BY p.prezzo DESC LIMIT 3
+
+
+//Che prezzo medio dei 3 pavimenti più cari al mq
+MATCH (f:fornitore)-[pr:PRODUCE]-(p:pavimento)
+WITH f.nome, p.modello, p.prezzo ORDER BY p.prezzo DESC LIMIT 3
+RETURN AVG(prezzo)
+
+
+----------------------- CICLI ------------------------------
+
+//Trovare coppie di pavimenti abbinati con voto medio maggiore di 5
+MATCH (p1:pavimento)-[a:ABBINATO_A]-(p2:pavimento)
+WHERE a.voto_medio>5 AND id(p1)>id(p2)
+RETURN p1.modello, p1.formato, p1.tipo, p2.modello, p2.formato, p2.tipo, a.voto_medio
+
+//Trovare la lista di pavimenti da abbinare per ‘collegare’ un pavimento di tipo parquet a uno di tipo gres
+MATCH pa=shortestPath((p1:pavimento)-[a:ABBINATO_A*]-(p2:pavimento))
+WHERE p1.tipo='parquet' and p2.tipo='gres'
+RETURN pa
+
+------------------------ FINDING PATHS --------------------
+
+// Trovare percorsi utilizzando diverse funzioni
+// Cerco una distanza precisa
+
+MATCH (tom:Person {name:'Tom Hanks'})--{2}(colleagues:Person)
+RETURN DISTINCT colleagues.name AS name, colleagues.born AS bornIn
+ORDER BY bornIn
+LIMIT 5
+
+// Fa vedere i primi 5 che vengono trovati a distanza 2, il 2 è un quantificatore
+
+// SHORTEST PATH
+
+Senza apoc
+MATCH (n1), (n2), p=shortestPath((n1)-[*]-(n2))
+RETURN p
+
+Con apoc
+MATCH (n1), (n2)
+CALL apoc.path.findAll(n1, n2, 'relation', '', {})
+
+Il '' è dedicato a LabelFilter, serve per indicare per quali nodi passare, mentre {} serve per indicare il numero massimo di passi da fare
+
+// Tutti gli shortest path possibili 
+MATCH (catelyn:Character {name: "Catelyn"}), (drogo:Character {name: "Drogo"})
+MATCH p=allShortestPaths((catelyn)-[INTERACTS*]-(drogo))
+RETURN p
+
+
+---------------------- DEVIAZIONE STANDARD -------------------
+
+MATCH (u:User)
+RETURN stDev(u.age) as age_deviation
+
+---------------------- PERCENTILE ----------------------------
+MATCH (u:User)
+RETURN percentileCont(u.age, 0.5) as median_age
+
+---------------------- MEDIA ---------------------------------
+
+// fatto con subquery
+MATCH (u:User)-[:LISTENS_TO]->(a:Artist)
+WITH a.name AS Artista, count(u) as listeners
+CALL {
+    MATCH (:User) 
+    RETURN count(*) as total_users
+}
+RETURN Artista, (listeners * 1.0 / total_users) as media
+
+// funzione di media
+MATCH (a:Author)-[wr:WRITE]->(d:Document)
+WITH COUNT(d) AS ContoDoc, a.Author_name AS Autore 
+RETURN AVG(ContoDoc) AS MEDIA
+
+-------------------- COMMUNITY DETECTION ----------------------
+// RICORDA sempre generare un grafo in memoria
+CALL gds.graph.project("user-rel-graph", ["Author","Document", "KeyWord"], ["WRITE", "HAS"]) 
+YIELD graphName AS graph, nodeProjection, nodeCount AS nodes, relationshipCount AS rels
+
+
+// Louvain
+
+// Esegui Louvain community detection
+CALL gds.louvain.stream('myGraph')
+YIELD nodeId, communityId
+RETURN gds.util.asNode(nodeId).name AS user, communityId
+ORDER BY communityId, user
+
+/////////////
+CALL gds.louvain.stream('user-rel-graph')
+YIELD nodeId, communityId
+WITH count(nodeId) as Conto, communityId AS Gruppo
+RETURN Conto, Gruppo
+ORDER BY Conto DESC
+////////////
+
+// Weakly Connected Component
+
+CALL gds.wcc.stream('tweet-similarity-graph')
+YIELD nodeId, componentId
+RETURN componentId AS partition,
+       count(*) AS numeroTweet,
+       collect(gds.util.asNode(nodeId).text) AS text
+ORDER BY numeroTweet DESC;
+
+Per wcc guarda in recommendation o fraud detection
+
+--------------- WHERE CLAUSE ----------------------
+Per usare where, viene utilizzata come condizione di ricercar (quindi per mettere delle condizioni ad esempio sulle proprietà)
+
+MATCH (a:Person) WHERE a.name STARTS WITH 'A' RETURN a
+
+--------------- WEIGHTED CENTRALITY ---------------
+MATCH (c:Character)-[r:INTERACTS]-()
+RETURN c.name AS character, SUM(r.weight) AS weightedDegree
+ORDER BY weightedDegree DESC
+
+// WEIGHT DI UNO SHORTEST PATH	
+MATCH p = SHORTEST 1(catelyn:Character {name: "Catelyn"})-[: INTERACTS*]-(drogo:Character {name: "Drogo"})
+RETURN [n in nodes(p) | n.name] AS character, reduce(s = 0, rel in relationships(p) | s + rel.weight) AS total_weight
+
+---------------- DEGREE CENTRALITY ----------------
+MATCH (c:Character)
+RETURN c.name AS character, COUNT { (c)-[:INTERACTS]-() } AS degree
+ORDER BY degree DESC
+
+----------------- PIVOTAL NODES E NODI IMPORTANTI --------------------	
+MATCH (a:Character), (b:Character) WHERE id(a) > id(b)
+MATCH p=allShortestPaths((a)-[:INTERACTS*]-(b)) WITH collect(p) AS paths, a, b
+MATCH (c:Character) WHERE all(x IN paths WHERE c IN nodes(x)) AND NOT c IN [a,b]
+RETURN a.name, b.name, c.name AS PivotalNode SKIP 490 LIMIT 10
+
+Si trovano tutti gli shortest path e i nodi pivot sono i più important in queste relazioni
+Lo skip è per ridurre il numero di ricerche. Altrimenti troverebbe (nei grafi troppo grandi) troppi risultati.
+
+---------------- DIAMETRO DELLA RETE -----------------------------------	
+MATCH (a:Character), (b:Character) WHERE id(a) > id(b)
+MATCH p=shortestPath((a)-[:INTERACTS*]-(b))
+RETURN length(p) AS len
+ORDER BY len DESC LIMIT 10
+
+------------------------ DENSITÀ ------------------------------------
+CASO DIRETTO
+
+CALL apoc.meta.stats() YIELD nodeCount, relCount
+RETURN toFloat(relCount) / (nodeCount * (nodeCount - 1)) as density
+
+CASO INDIRETTO
+
+CALL apoc.meta.stats() YIELD nodeCount, relCount
+RETURN toFloat(relCount*2) / (nodeCount * (nodeCount - 1)) as density
+
+--------------------- CHIAMATA DELLA PROIEZIONE ----------------------
+CALL gds.graph.project(
+  'nomeGrafo',              // nome della proiezione
+  ['Person', 'Movie'],      // etichette dei nodi inclusi
+  {
+    ACTED_IN: {
+      type: 'ACTED_IN',     // tipo di relazione
+      orientation: 'NATURAL', // direzione (NATURAL, REVERSE, UNDIRECTED)
+      properties: ['role']  // proprietà opzionali da proiettare
+    }
+  }
+)
+YIELD graphName AS graph, nodeProjection, nodeCount AS nodes, relationshipCount AS rels
+
+
+

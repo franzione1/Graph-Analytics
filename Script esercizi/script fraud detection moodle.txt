@@ -1,0 +1,89 @@
+// punto 1. visualizzare lo schema dei dati
+call apoc.meta.graph() // funzione apoc.meta.graph() visualizza tutto lo schema dei dati, ovvero una proiezione delle connessioni 'generiche' tra i nodi
+
+// ad esempio, in un grafo con nodi persona, cibo e ristorante, la visualizzazione sará Persona-->Cibo-->Ristorante peró non funziona
+
+MATCH (n)-[r]->(m)
+RETURN DISTINCT labels(n), type(r), labels(m)
+
+// punto 2. visualizzare gli utenti che condivido un qualche dettaglio personale come telefono, email o tessera sanitaria con altri utenti
+
+MATCH (u:User)-[:HAS_EMAIL]-(e:Email)-[:HAS_EMAIL]-(u2:User)
+WHERE u.name>u2.name RETURN u.name,e.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_PHONE_NUMBER]-(p:PhoneNumber)-[:HAS_PHONE_NUMBER]-(u2:User) 
+WHERE u.name>u2.name RETURN u.name, p.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_HEALTHINSURANCE]-(h:HealthInsurance)-[:HAS_HEALTHINSURANCE]-(u2:User)
+WHERE u.name>u2.name RETURN u.name, h.value as detail, u2.name
+
+// fai attenzione a come usa Return. Serve per restituire un risultato sotto forma di tabella (RETURN RESTITUISCE SOLO TABELLE)
+
+// domanda 3. visualizzare gli utenti che condivido un qualche dettaglio personale o professionale come telefono, email, tessera sanitaria, indirizzo lavorativo con altri utenti
+
+MATCH (u:User)-[:HAS_EMAIL]-(e:Email)-[:HAS_EMAIL]-(u2:User)
+WHERE u.name>u2.name RETURN u.name,e.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_PHONE_NUMBER]-(p:PhoneNumber)-[:HAS_PHONE_NUMBER]-(u2:User) 
+WHERE u.name>u2.name RETURN u.name, p.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_HEALTHINSURANCE]-(h:HealthInsurance)-[:HAS_HEALTHINSURANCE]-(u2:User)
+WHERE u.name>u2.name RETURN u.name, h.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_WORKADDRESS]-(w:WorkAddress)-[:HAS_WORKADDRESS]-(u2:User)
+WHERE u.name>u2.name RETURN u.name, w.value as detail, u2.name
+
+// letteralmente uguale, ma con una richiesta in piú 
+
+// domanda 4. visualizzare gli utenti che condivido un qualche dettaglio personale o professionale o di connessione con altri utenti (come telefono, email, tessera sanitaria, indirizzo lavorativo, IP da cui si sono connessi)
+
+MATCH (u:User)-[:HAS_EMAIL]-(e:Email)-[:HAS_EMAIL]-(u2:User)
+WHERE u.name>u2.name RETURN u.name,e.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_PHONE_NUMBER]-(p:PhoneNumber)-[:HAS_PHONE_NUMBER]-(u2:User) 
+WHERE u.name>u2.name RETURN u.name, p.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_HEALTHINSURANCE]-(h:HealthInsurance)-[:HAS_HEALTHINSURANCE]-(u2:User)
+WHERE u.name>u2.name RETURN u.name, h.value as detail, u2.name
+UNION
+MATCH (u:User)-[:HAS_WORKADDRESS]-(w:WorkAddress)-[:HAS_WORKADDRESS]-(u2:User)
+WHERE u.name>u2.name RETURN u.name, w.value as detail, u2.name
+UNION
+MATCH (u:User)-[:CONNECTED_FROM_workaddress]-(ip:IPIstance)-[:CONNECTED_FROM_workaddress]-(u2:User)
+WHERE u.name>u2.name RETURN u.name, ip.ip as detail, u2.name
+
+//domanda 5. discutere l’ipotetico giro di frode in base ai risultati che si sono trovati ai punti precedenti
+
+// ragionamento fatto nella correzione: applico una proiezione considerando utenti che condivido un qualche dettaglio personale o professionale o di connessione con altri utenti (come telefono, email, tessera sanitaria, indirizzo lavorativo, IP da cui si sono connessi)
+
+CALL{MATCH (u:User)-[:HAS_EMAIL]-(e:Email)-[:HAS_EMAIL]-(u2:User)
+WHERE u.name>u2.name RETURN u,u2
+UNION
+MATCH (u:User)-[:HAS_PHONE_NUMBER]-(p:PhoneNumber)-[:HAS_PHONE_NUMBER]-(u2:User) 
+WHERE u.name>u2.name RETURN u,u2
+UNION
+MATCH (u:User)-[:HAS_HEALTHINSURANCE]-(h:HealthInsurance)-[:HAS_HEALTHINSURANCE]-(u2:User)
+WHERE u.name>u2.name RETURN u,u2
+UNION
+MATCH (u:User)-[:HAS_WORKADDRESS]-(w:WorkAddress)-[:HAS_WORKADDRESS]-(u2:User)
+WHERE u.name>u2.name RETURN u,u2
+UNION
+MATCH (u:User)-[:CONNECTED_FROM_workaddress]-(ip:IPIstance)-[:CONNECTED_FROM_workaddress]-(u2:User)
+WHERE u.name>u2.name RETURN u,u2
+}
+WITH gds.graph.project('user-user-link', // Nome assegnato alla proiezione. Questo è come viene identificato il grafo in memoria all’interno della GDS library
+  u, u2, // Sono gli alias per i nodi. Qui si riferiscono a due insiemi distinti di nodi per origine e destinazione del collegamento (vedi sotto), ma in pratica sono entrambi nodi dello stesso tipo. Possono essere nomi qualsiasi, ma vengono poi riferiti nei parametri successivi.
+  {sourceNodeLabels:'User', 
+  targetNodeLabels:'User'}, // Specifica che i nodi di partenza (source) e di arrivo (target) della relazione hanno entrambi l’etichetta 'User'.
+  {relationshipType: 'HAS_LINK'}) AS graph // In pratica, questo dice: "Crea un grafo in memoria dove i nodi sono di tipo User e le relazioni sono HAS_LINK."
+RETURN graph.nodeCount AS nodeCount, graph.relationshipCount AS relationshipCount
+
+// Studio i componenti connessi 
+CALL gds.wcc.stream('user-user-link') // weakly connected components: WCC serve per trovare i gruppi (componenti connesse) di nodi collegati tra loro, anche senza tener conto della direzione delle relazioni. 'user-user-link' è il nome del grafo proiettato in memoria, creato precedentemente. La modalità stream restituisce i risultati riga per riga, dove ogni riga rappresenta un nodo del grafo e il componente a cui appartiene.
+YIELD nodeId, componentId // estrae quei due valori dall'algoritmo
+RETURN componentId AS partition, COUNT(*) AS members, COLLECT(gds.util.asNode(nodeId).name) AS names // RETURN restituisce un riepilogo per ogni componente connessa: componentId AS partition: rinomina componentId in partition (più leggibile, indica una partizione del grafo). COUNT(*) AS members: conta quanti nodi fanno parte di quella componente. 
+ORDER BY members DESC
+
+// Ora analizza i risultati. Noti dei comportamenti fraudolenti? C’è un solo componente connesso che collega i 7 utenti – questi 7 utenti potrebbero far parte di un giro di frode dal momento che condividono almeno un dettaglio, l’uno con l’altro (risultato dell'esame)
+
+

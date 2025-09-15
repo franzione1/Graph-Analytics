@@ -40,7 +40,7 @@ LIMIT 5; // ne mostriamo solo i top 5
 
 // Creiamo la lista per qualsiasi utente
 MATCH (u:User)-[r:RATED]->(:Dish)-[s:SIMILAR_TO]-(rec:Dish)
-WHERE r.rating >= 4 AND NOT EXISTS (u)-[:RATED]->(rec)
+WHERE r.rating >= 4 AND NOT EXISTS {(u)-[:RATED]->(rec)} ricorda la graffa perché va in errore
 RETURN DISTINCT u.name, rec.name AS Recommendation, s.similarity AS Similarity
 ORDER BY Similarity DESC
 
